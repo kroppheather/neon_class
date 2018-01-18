@@ -204,6 +204,9 @@ SHFtoagg <- ldply(SHFList,data.frame)
 				SHFtoagg$site),
 		FUN="mean", na.action=na.omit)	
 	colnames(SHF) <- c("doy","year","vertI","site","SHF")
+
+#all at depth of 0.08m
+
 	
 #organize the bio data
 BIOInfo <- FilestoRead[BIOID,]
@@ -238,5 +241,89 @@ BIOT0 <- data.frame(BIOT0[,1:2],BIOT0[,5:6])
 #join together
 BIOtemps <- join(BIOT0,BIOTC, by=c("doy","year","site"),type="full")
 
+
+#soil temperature
+SOILInfo <- FilestoRead[SOILID,]
+SOILList <- list()
+for(i in 1:length(SOILID)){
+	SOILList[[i]] <- dataList[[SOILID[i]]]
+	SOILList[[i]]$Date <- as.Date(SOILList[[i]]$endDateTime, "%Y-%m-%dT%H:%M:%SZ")
+	SOILList[[i]]$doy <- yday(SOILList[[i]]$Date)
+	SOILList[[i]]$year <- year(SOILList[[i]]$Date)
+	SOILList[[i]]$vertI <- rep(SOILInfo$vertI[i], dim(SOILList[[i]])[1])
+	SOILList[[i]]$spaceI <- rep(SOILInfo$spaceI[i], dim(SOILList[[i]])[1])
+	SOILList[[i]]$site <- rep(SOILInfo$site[i], dim(SOILList[[i]])[1])
+}
+#just take uppermost sensor that is 1-11cm depth
+SOILtoagg <- ldply(SOILList,data.frame)
+SOILtoagg <- SOILtoagg[SOILtoagg$vertI=="501",]
+#average across plots
+ 	SOILT<- aggregate(SOILtoagg$soilTempMean,
+		by=list(SOILtoagg$doy,SOILtoagg$year,
+				SOILtoagg$site),
+		FUN="mean", na.action=na.omit)	
+		
+	colnames(SOILT) <- c("doy","year","site","SOILT")	
+
+#precip units in mm
+PRInfo <- FilestoRead[PRID,]
+PRList <- list()
+for(i in 1:length(PRID)){
+	PRList[[i]] <- dataList[[PRID[i]]]
+	PRList[[i]]$Date <- as.Date(PRList[[i]]$endDateTime, "%Y-%m-%dT%H:%M:%SZ")
+	PRList[[i]]$doy <- yday(PRList[[i]]$Date)
+	PRList[[i]]$year <- year(PRList[[i]]$Date)
+	PRList[[i]]$vertI <- rep(PRInfo$vertI[i], dim(PRList[[i]])[1])
+	PRList[[i]]$spaceI <- rep(PRInfo$spaceI[i], dim(PRList[[i]])[1])
+	PRList[[i]]$site <- rep(PRInfo$site[i], dim(PRList[[i]])[1])
+}
+
+PRtoagg <- ldply(PRList,data.frame)	
+PRtoagg <- PRtoagg[PRtoagg$spaceI=="000"|PRtoagg$spaceI=="900",]
+#sum up daily
+ 	PR<- aggregate(PRtoagg$secPrecipBulk,
+		by=list(PRtoagg$doy,PRtoagg$year,
+				PRtoagg$site),
+		FUN="sum" )	
+		
+		
+#precip data doesn't look trustworthy
+
+#combine data so that each site has all data together
+#data frames include	
+
+Lall<- list(netRdf2,SHF ,RHdf2,BIOtemps,SOILT)
+
+DFall <- join_all(Lall, by=c("doy","year","site"),type="full")
+Sites <- unique(DFall$site)
+
+DFList<- list()
+for(i in 1:length(Sites)){
+	DFList[[i]] <- DFall[DFall$site==Sites[i],]
+	write.table(DFList[[i]], 
+				paste0("c:\\Users\\hkropp\\Google Drive\\ES_ecology\\neon_raw\\neon_out\\allData",Sites[i],".csv"),
+				sep=",", row.names=FALSE)
+}	
+#make plots of each dataset
+for(i in 1:length(Sites)){
+	for(j in 1:10){
+	jpeg(paste0("c:\\Users\\hkropp\\Google Drive\\ES_ecology\\neon_raw\\neon_out\\plotCheck\\",
+				Sites[i],colnames(DFList[[i]])[j+5],".jpg"),
+				, width=700, height=500, units="px", quality=100)
+	if(length(which(is.na(DFList[[i]][,j+5])==FALSE))!=0){
+	plot(DFList[[i]]$doy, DFList[[i]][,j+5], type="b", pch=19, lwd=2,
+	xlab=" DOY 2017", ylab=paste(colnames(DFList[[i]])[j+5]),
+	main=paste(Sites[i]))
+	dev.off()
+	}else{
+		plot(c(0,1),c(0,1), type="n",xlab=" DOY 2017", 
+			ylab=paste(colnames(DFList[[i]])[j+5]),
+		main=paste(Sites[i]))
+		text(0.5,0.5, "No data",cex=2)
+		}
+	}
+}
+
+head(DFall)
 
 	
